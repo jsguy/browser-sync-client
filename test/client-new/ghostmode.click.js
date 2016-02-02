@@ -100,39 +100,39 @@ describe("The click Plugin", function () {
 
     describe("socketEvent(): ", function(){
 
-        var func, canSyncStub, triggerClick, elemStub;
+        var func, canSyncStub, triggerEvent, elemStub;
         before(function(){
             socketEventStub.restore();
             func            = clicks.socketEvent(bs, __bs_events__);
             canSyncStub     = sinon.stub(bs, "canSync").returns(true);
-            triggerClick    = sinon.stub(__bs_events__, "triggerClick");
+            triggerEvent    = sinon.stub(__bs_events__, "triggerEvent");
             elemStub        = sinon.stub(bs.utils, "getSingleElement").returns(true);
         });
         afterEach(function () {
             canSyncStub.reset();
             elemStub.reset();
-            triggerClick.reset();
+            triggerEvent.reset();
         });
         after(function () {
             canSyncStub.restore();
-            triggerClick.restore();
+            triggerEvent.restore();
             elemStub.restore();
         });
         it("should return early if cannot sync", function(){
             canSyncStub.returns(false);
             func({});
-            sinon.assert.notCalled(triggerClick);
+            sinon.assert.notCalled(triggerEvent);
         });
-        it("should call triggerClick() if canSync is true", function(){
+        it("should call triggerEvent() if canSync is true", function(){
             canSyncStub.returns(true);
             func({});
-            sinon.assert.called(triggerClick);
+            sinon.assert.called(triggerEvent);
         });
         it("should not attempt to trigger a click if element does not exist", function(){
             canSyncStub.returns(true);
             elemStub.returns(false);
             func({});
-            sinon.assert.notCalled(triggerClick);
+            sinon.assert.notCalled(triggerEvent);
         });
     });
 });
