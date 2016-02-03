@@ -114,7 +114,7 @@ function getByPath(obj, path) {
 
     return obj;
 }
-},{"./browser.utils":2,"./emitter":5,"./notify":16,"./socket":17,"./tab":18}],2:[function(require,module,exports){
+},{"./browser.utils":2,"./emitter":5,"./notify":18,"./socket":19,"./tab":20}],2:[function(require,module,exports){
 "use strict";
 
 var utils = exports;
@@ -255,7 +255,6 @@ utils.getXpath = function(elem){
                 }
 
                 var tagName = elem.nodeName.toLowerCase();
-                //var pathIndex = (index ? "[" + (index + 1) + "]" : "");
                 //  Always use index, otherwise first elem matches all elements
                 var pathIndex = "[" + (index + 1) + "]";
                 paths.splice(0, 0, tagName + pathIndex);
@@ -272,17 +271,9 @@ utils.getXpath = function(elem){
  * @returns element
  */
 utils.getElementByXpath = function(xpath){
-    /* jshint ignore:start */
-    console.log('getElementByXpath');
-    if(typeof wgxpath !== "undefined") {
-        console.log('install wgxpath');
-        wgxpath.install();
-    } else {
-        console.log('no wgxapth');
-    }
-    var xpathSelector = document.evaluate(xpath, document.body);
+    utils.getWindow().wgxpath.install();
+    var xpathSelector = utils.getDocument().evaluate(xpath, utils.getDocument().body);
     return xpathSelector.iterateNext();
-    /* jshint ignore:end */
 };
 
 /**
@@ -785,11 +776,11 @@ exports._fixEvent = function (event) {
             var doc = document.documentElement, body = document.body;
 
             event.pageX = event.clientX +
-            (doc && doc.scrollLeft || body && body.scrollLeft || 0) -
-            (doc && doc.clientLeft || body && body.clientLeft || 0);
+                (doc && doc.scrollLeft || body && body.scrollLeft || 0) -
+                (doc && doc.clientLeft || body && body.clientLeft || 0);
             event.pageY = event.clientY +
-            (doc && doc.scrollTop || body && body.scrollTop || 0) -
-            (doc && doc.clientTop || body && body.clientTop || 0);
+                (doc && doc.scrollTop || body && body.scrollTop || 0) -
+                (doc && doc.clientTop || body && body.clientTop || 0);
         }
 
         // Handle key presses
@@ -814,7 +805,7 @@ exports._EventManager = function (cache) {
 
     var nextGuid = 1;
 
-    this.addEvent = function (elem, type, fn) {
+    this.addEvent = function (elem, type, fn, bs) {
 
         var data = cache.getData(elem);
 
@@ -845,7 +836,7 @@ exports._EventManager = function (cache) {
 
         if (data.handlers[type].length == 1) {
             if (document.addEventListener) {
-                elem.addEventListener(type, data.dispatcher, true);
+                elem.addEventListener(type, data.dispatcher, (bs && bs.options.capture) || false);
             }
             else if (document.attachEvent) {
                 elem.attachEvent("on" + type, data.dispatcher);
@@ -990,10 +981,59 @@ exports.triggerEvent = function(elem, type, name, args){
     }, 0);
 };
 
+/**
+ * Mainly used for triggering change Event on SELECT in firefox.
+ * @param elem
+ */
+exports.triggerChange = function(elem){
+    var evObj;
+    if(document.createEvent){
+        window.setTimeout(function () {
+            evObj = document.createEvent("HTMLEvents");
+            evObj.initEvent("change", true, true);
+            elem.dispatchEvent(evObj);
+        },0);
+    }
+};
+
+/**
+ * Trigger a mouseup/mousedown event on given element.
+ * @param elem
+ * @param mouseEventName should be 'mouseup' or 'mousedown'
+ */
+exports.triggerMouseUpDown = function (elem, mouseEventName) {
+
+    var evObj;
+    if (window.MouseEvent) {
+        evObj = new MouseEvent((mouseEventName === 'mouseup' ? 'mouseup' : 'mousedown'), {
+            view: window,
+            bubbles: true,
+            cancelable: true
+        });
+        elem.dispatchEvent(evObj);
+    } else if (document.createEvent) {
+        window.setTimeout(function () {
+            evObj = document.createEvent("MouseEvents");
+            evObj.initEvent(mouseEventName === 'mouseup' ? 'mouseup' : 'mousedown', true, true);
+            elem.dispatchEvent(evObj);
+        }, 0);
+    } else {
+        window.setTimeout(function () {
+            if (document.createEventObject) {
+                evObj = document.createEventObject();
+                evObj.cancelBubble = true;
+                elem.fireEvent("on" + (mouseEventName === 'mouseup' ? 'mouseup' : 'mousedown'), evObj);
+            }
+        }, 0);
+    }
+};
+
 var cache = new exports._ElementCache();
 var eventManager = new exports._EventManager(cache);
 
 eventManager.triggerEvent = exports.triggerEvent;
+eventManager.triggerMouseUpDown = exports.triggerMouseUpDown;
+eventManager.triggerChange = exports.triggerChange;
 
 exports.manager = eventManager;
 
@@ -1016,7 +1056,7 @@ exports.canEmitEvents = true;
  * @param eventManager
  */
 exports.init = function (bs, eventManager) {
-    eventManager.addEvent(document.body, EVENT_NAME, exports.browserEvent(bs));
+    eventManager.addEvent(document.body, EVENT_NAME, exports.browserEvent(bs), bs);
     bs.socket.on(EVENT_NAME, exports.socketEvent(bs, eventManager));
 
     /*
@@ -1358,7 +1398,9 @@ exports.plugins = {
     "scroll":   require("./ghostmode.scroll"),
     "clicks":   require("./ghostmode.clicks"),
     "forms":    require("./ghostmode.forms"),
-    "location": require("./ghostmode.location")
+	"location": require("./ghostmode.location"),
+	"mouseup": require("./ghostmode.mouseup"),
+	"mousedown": require("./ghostmode.mousedown")
 };
 
 /**
@@ -1370,7 +1412,7 @@ exports.init = function (bs) {
         exports.plugins[name].init(bs, eventManager);
     }
 };
-},{"./events":6,"./ghostmode.clicks":7,"./ghostmode.forms":9,"./ghostmode.location":13,"./ghostmode.scroll":14}],13:[function(require,module,exports){
+},{"./events":6,"./ghostmode.clicks":7,"./ghostmode.forms":9,"./ghostmode.location":13,"./ghostmode.mousedown":14,"./ghostmode.mouseup":15,"./ghostmode.scroll":16}],13:[function(require,module,exports){
 "use strict";
 
 /**
@@ -1421,6 +1463,140 @@ exports.setPath = function (path) {
     window.location = window.location.protocol + "//" + window.location.host + path;
 };
 },{}],14:[function(require,module,exports){
+"use strict";
+
+/**
+ * This is the plugin for syncing clicks between browsers
+ * @type {string}
+ */
+var EVENT_NAME  = "mousedown";
+var OPT_PATH    = "ghostMode.mousedown";
+exports.canEmitEvents = true;
+
+/**
+ * @param {BrowserSync} bs
+ * @param eventManager
+ */
+exports.init = function (bs, eventManager) {
+    eventManager.addEvent(document.body, EVENT_NAME, exports.browserEvent(bs), bs);
+    bs.socket.on(EVENT_NAME, exports.socketEvent(bs, eventManager));
+};
+
+/**
+ * Uses event delegation to determine the clicked element
+ * @param {BrowserSync} bs
+ * @returns {Function}
+ */
+exports.browserEvent = function (bs) {
+
+    return function (event) {
+
+        if (exports.canEmitEvents) {
+
+            var elem = event.target || event.srcElement;
+
+            if (elem.type === "checkbox" || elem.type === "radio") {
+                bs.utils.forceChange(elem);
+                return;
+            }
+
+            bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem));
+
+        } else {
+            exports.canEmitEvents = true;
+        }
+    };
+};
+
+/**
+ * @param {BrowserSync} bs
+ * @param {manager} eventManager
+ * @returns {Function}
+ */
+exports.socketEvent = function (bs, eventManager) {
+
+    return function (data) {
+
+        if (!bs.canSync(data, OPT_PATH)) {
+            return false;
+        }
+
+        var elem = bs.utils.getSingleElement(data.tagName, data.index);
+
+        if (elem) {
+            exports.canEmitEvents = false;
+            eventManager.triggerMouseUpDown(elem,"mousedown");
+        }
+    };
+};
+},{}],15:[function(require,module,exports){
+"use strict";
+
+/**
+ * This is the plugin for syncing clicks between browsers
+ * @type {string}
+ */
+var EVENT_NAME  = "mouseup";
+var OPT_PATH    = "ghostMode.mouseup";
+exports.canEmitEvents = true;
+
+/**
+ * @param {BrowserSync} bs
+ * @param eventManager
+ */
+exports.init = function (bs, eventManager) {
+    eventManager.addEvent(document.body, EVENT_NAME, exports.browserEvent(bs), bs);
+    bs.socket.on(EVENT_NAME, exports.socketEvent(bs, eventManager));
+};
+
+/**
+ * Uses event delegation to determine the clicked element
+ * @param {BrowserSync} bs
+ * @returns {Function}
+ */
+exports.browserEvent = function (bs) {
+
+    return function (event) {
+
+        if (exports.canEmitEvents) {
+
+            var elem = event.target || event.srcElement;
+
+            if (elem.type === "checkbox" || elem.type === "radio") {
+                bs.utils.forceChange(elem);
+                return;
+            }
+
+            bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem));
+
+        } else {
+            exports.canEmitEvents = true;
+        }
+    };
+};
+
+/**
+ * @param {BrowserSync} bs
+ * @param {manager} eventManager
+ * @returns {Function}
+ */
+exports.socketEvent = function (bs, eventManager) {
+
+    return function (data) {
+
+        if (!bs.canSync(data, OPT_PATH)) {
+            return false;
+        }
+
+        var elem = bs.utils.getSingleElement(data.tagName, data.index);
+
+        if (elem) {
+            exports.canEmitEvents = false;
+            eventManager.triggerMouseUpDown(elem,"mouseup");
+        }
+    };
+};
+},{}],16:[function(require,module,exports){
 "use strict";
 
 /**
@@ -1594,7 +1770,7 @@ exports.getScrollTopPercentage = function (pos) {
     var percentage  = exports.getScrollPercentage(scrollSpace, pos);
     return percentage.y;
 };
-},{}],15:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 "use strict";
 
 var socket       = require("./socket");
@@ -1673,7 +1849,7 @@ if (window.__karma__) {
     window.__bs_index__      = exports;
 }
 /**debug:end**/
-},{"./browser-sync":1,"./browser.utils":2,"./client-shims":3,"./code-sync":4,"./emitter":5,"./events":6,"./ghostmode":12,"./ghostmode.clicks":7,"./ghostmode.forms":9,"./ghostmode.forms.input":8,"./ghostmode.forms.submit":10,"./ghostmode.forms.toggles":11,"./ghostmode.location":13,"./ghostmode.scroll":14,"./notify":16,"./socket":17,"./wgxpath.install":19}],16:[function(require,module,exports){
+},{"./browser-sync":1,"./browser.utils":2,"./client-shims":3,"./code-sync":4,"./emitter":5,"./events":6,"./ghostmode":12,"./ghostmode.clicks":7,"./ghostmode.forms":9,"./ghostmode.forms.input":8,"./ghostmode.forms.submit":10,"./ghostmode.forms.toggles":11,"./ghostmode.location":13,"./ghostmode.scroll":16,"./notify":18,"./socket":19,"./wgxpath.install":21}],18:[function(require,module,exports){
 "use strict";
 
 var scroll = require("./ghostmode.scroll");
@@ -1723,7 +1899,20 @@ exports.init = function (bs) {
         }
     }
 
-    elem = document.createElement("DIV");
+    elem = createElement();
+
+    var flashFn = exports.watchEvent(bs);
+
+    bs.emitter.on("notify", flashFn);
+    bs.socket.on("browser:notify", flashFn);
+
+    return elem;
+};
+
+function createElement(){
+    var cssStyles = styles;
+
+    var elem = document.createElement("DIV");
     elem.id = "__bs_notify__";
 
     if (typeof cssStyles === "string") {
@@ -1734,13 +1923,9 @@ exports.init = function (bs) {
         }
     }
 
-    var flashFn = exports.watchEvent(bs);
-
-    bs.emitter.on("notify", flashFn);
-    bs.socket.on("browser:notify", flashFn);
-
     return elem;
-};
+}
+
 
 /**
  * @returns {Function}
@@ -1760,6 +1945,13 @@ exports.watchEvent = function (bs) {
  *
  */
 exports.getElem = function () {
+    var elementFound = false;
+    if(elem && elem.id){
+        elementFound = document.getElementById(elem.id);
+    }
+    if(!elementFound){
+        elem = createElement();
+    }
     return elem;
 };
 
@@ -1797,7 +1989,7 @@ exports.flash = function (message, timeout) {
 
     return elem;
 };
-},{"./browser.utils":2,"./ghostmode.scroll":14}],17:[function(require,module,exports){
+},{"./browser.utils":2,"./ghostmode.scroll":16}],19:[function(require,module,exports){
 "use strict";
 
 /**
@@ -1838,7 +2030,7 @@ exports.emit = function (name, data) {
 exports.on = function (name, func) {
     exports.socket.on(name, func);
 };
-},{}],18:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 var utils        = require("./browser.utils");
 var emitter      = require("./emitter");
 var $document    = utils.getDocument();
@@ -1875,7 +2067,7 @@ if (typeof $document.addEventListener === "undefined" ||
 } else {
     $document.addEventListener(visibilityChange, handleVisibilityChange, false);
 }
-},{"./browser.utils":2,"./emitter":5}],19:[function(require,module,exports){
+},{"./browser.utils":2,"./emitter":5}],21:[function(require,module,exports){
 /* jshint ignore:start */
 (function(){function h(a){return function(){return this[a]}}function l(a){return function(){return a}}var m=this;
 function ba(a){var b=typeof a;if("object"==b)if(a){if(a instanceof Array)return"array";if(a instanceof Object)return b;var c=Object.prototype.toString.call(a);if("[object Window]"==c)return"object";if("[object Array]"==c||"number"==typeof a.length&&"undefined"!=typeof a.splice&&"undefined"!=typeof a.propertyIsEnumerable&&!a.propertyIsEnumerable("splice"))return"array";if("[object Function]"==c||"undefined"!=typeof a.call&&"undefined"!=typeof a.propertyIsEnumerable&&!a.propertyIsEnumerable("call"))return"function"}else return"null";
@@ -1954,4 +2146,4 @@ M(a);c=[];for(var e=N(d);e;e=N(d))c.push(e instanceof C?e.a:e);this.snapshotLeng
 0>a?null:c[a]}}Y.ANY_TYPE=0;Y.NUMBER_TYPE=1;Y.STRING_TYPE=2;Y.BOOLEAN_TYPE=3;Y.UNORDERED_NODE_ITERATOR_TYPE=4;Y.ORDERED_NODE_ITERATOR_TYPE=5;Y.UNORDERED_NODE_SNAPSHOT_TYPE=6;Y.ORDERED_NODE_SNAPSHOT_TYPE=7;Y.ANY_UNORDERED_NODE_TYPE=8;Y.FIRST_ORDERED_NODE_TYPE=9;function Qb(a){this.lookupNamespaceURI=Za(a)}
 function Rb(a){a=a||m;var b=a.document;b.evaluate||(a.XPathResult=Y,b.evaluate=function(a,b,e,f){return(new Pb(a,e)).evaluate(b,f)},b.createExpression=function(a,b){return new Pb(a,b)},b.createNSResolver=function(a){return new Qb(a)})}var Sb=["wgxpath","install"],Z=m;Sb[0]in Z||!Z.execScript||Z.execScript("var "+Sb[0]);for(var Tb;Sb.length&&(Tb=Sb.shift());)Sb.length||void 0===Rb?Z[Tb]?Z=Z[Tb]:Z=Z[Tb]={}:Z[Tb]=Rb;})()
 /* jshint ignore:end */
-},{}]},{},[15]);
+},{}]},{},[17]);

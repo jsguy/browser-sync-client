@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width">
+    <title>Stop Propagation</title>
+    <link rel="stylesheet" href="assets/style.css"/>
+	<script src='jquery.min.js'></script>
+	<script>
+
+	</script>
+</head>
+<body>
+<div class="container">
+    <textarea rows='5' cols='30'></textarea>
+	<div>
+		<button data-color='red'>Red</button>
+		<button data-color='yellow'> Yellow</button>
+		<button data-color='blue'> Blue</button>
+	</div>
+</div>
+<script>
+	$(function(){
+		$("button").click(function(e){
+			var $target = $(e.currentTarget);
+			var color = $target.data('color');
+			if(color==='red'){
+				e.stopPropagation();
+			}
+			$("textarea").css({"background-color": color});
+		});
+	});
+</script>
+</body>
+</html>
