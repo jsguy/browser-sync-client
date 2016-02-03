@@ -268,6 +268,24 @@ utils.getXpath = function(elem){
 };
 
 /**
+ * @param xpath
+ * @returns element
+ */
+utils.getElementByXpath = function(xpath){
+    /* jshint ignore:start */
+    console.log('getElementByXpath');
+    if(typeof wgxpath !== "undefined") {
+        console.log('install wgxpath');
+        wgxpath.install();
+    } else {
+        console.log('no wgxapth');
+    }
+    var xpathSelector = document.evaluate(xpath, document.body);
+    return xpathSelector.iterateNext();
+    /* jshint ignore:end */
+};
+
+/**
  * @param elem
  * @returns {{tagName: (elem.tagName|*), index: *}}
  */
@@ -923,6 +941,7 @@ exports._EventManager = function (cache) {
  * @param elem
  * @param type
  */
+/*
 exports.triggerEvent = function(elem, type){
     var evObj;
 
@@ -933,10 +952,39 @@ exports.triggerEvent = function(elem, type){
             evObj.cancelBubble = true;
             return elem.fireEvent("on" + type, evObj);
         } else {
-            /* jshint ignore:start */
-            /* jshint ignore:end */
             evObj = document.createEvent(type.toLowerCase() === "click"? "MouseEvents": "HTMLEvents");
             evObj.initEvent(type, true, true);
+            return !elem.dispatchEvent(evObj);
+        }
+    }, 0);
+};
+*/
+
+exports.triggerEvent = function(elem, type, name, args){
+    var evObj,
+        addArgs = function(e, args) {
+            var i;
+            args = args || {};
+            for(i in args) {if(args.hasOwnProperty(i)){
+                e[i] = args[i];
+            }}
+        };
+
+    name = name || typeof type !=="undefined" && type.toLowerCase() === "click"? 
+        "MouseEvents": 
+        "HTMLEvents";
+
+    window.setTimeout(function () {
+        // IE
+        if (document.createEventObject){
+            evObj = document.createEventObject();
+            evObj.cancelBubble = true;
+            addArgs(evObj, args);
+            return elem.fireEvent("on" + type, evObj);
+        } else {
+            evObj = document.createEvent(name);
+            evObj.initEvent(type, true, true);
+            addArgs(evObj, args);
             return !elem.dispatchEvent(evObj);
         }
     }, 0);
@@ -1020,12 +1068,7 @@ exports.socketEvent = function (bs, eventManager) {
             return false;
         }
 
-        /* jshint ignore:start */
-        //wgxpath.install();
-
-        var xpathSelector = document.evaluate(data.xpath, document.body);
-        elem = xpathSelector.iterateNext();
-        /* jshint ignore:end */
+        elem = bs.utils.getElementByXpath(data.xpath);
 
         if (elem) {
             exports.canEmitEvents = false;
@@ -1563,7 +1606,7 @@ var ghostMode    = require("./ghostmode");
 var emitter      = require("./emitter");
 var events       = require("./events");
 var utils        = require("./browser.utils");
-require("./wgxpath.install");
+var wgxpath      = require("./wgxpath.install");
 
 var shouldReload = false;
 var initialised    = false;
@@ -1585,7 +1628,6 @@ exports.init = function (options) {
         var browserSync = new BrowserSync(options);
 
         // Always init on page load
-        wgxpath.install();
         ghostMode.init(browserSync);
         codeSync.init(browserSync);
 

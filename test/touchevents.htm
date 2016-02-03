@@ -1,0 +1,109 @@
+<html>
+<head>
+	<title></title>
+	<style>
+* {box-sizing: border-box; }
+html, body {color: #FFF; background: #333; margin: 0; padding: 1em; font-size: 1em; line-height: 1.5; height: 100%; overflow-x: hidden; }
+button {margin: 0; padding: 2em 8em; border: 0; font-size: 100%; line-height: inherit; }
+#output {padding: 2em; background: #222; width: 100% }
+</style>
+</head>
+<body>
+
+<button id="button">Button</button>
+
+<div id="output"></div>
+
+<script>
+
+    var button, log, touchEndOn, touchStartOn, slice = [].slice;
+    log = function () {
+        var current, newLines, output;
+        newLines = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+        output = document.getElementById('output');
+        current = output.innerHTML;
+        return output.innerHTML = '' + current + newLines.join('<br>') + '<br><br>';
+    };
+    touchStartOn = function (el, x, y) {
+        var e, err;
+        x = x == null? 0: x;
+        y = y == null? 0: y;
+
+        console.log('ts', el, x, y);
+
+        try {
+            e = document.createEvent('UIEvent');
+            e.initUIEvent('touchstart', true, true);
+        } catch (_error) {
+            err = _error;
+            log(err);
+            try {
+				e = document.createEvent('TouchEvent');
+	            e.initTouchEvent('touchstart', true, true);
+            } catch (_error) {
+                err = _error;
+                log(err);
+                e = document.createEvent('Event');
+                e.initEvent('touchstart', true, true);
+            }
+        }
+
+
+        e.touches = e.targetTouches = [{pageX: x, pageY: y }];
+        return !el.dispatchEvent(e);
+    };
+    touchEndOn = function (el, x, y) {
+        var e, err;
+        x = x == null? 0: x;
+        y = y == null? 0: y;
+
+        try {
+            e = document.createEvent('UIEvent');
+            e.initUIEvent('touchend', true, true);
+        } catch (_error) {
+            err = _error;
+            log(err);
+            try {
+	            e = document.createEvent('TouchEvent');
+	            e.initTouchEvent('touchend', true, true);
+            } catch (_error) {
+                err = _error;
+                log(err);
+                e = document.createEvent('Event');
+                e.initEvent('touchend', true, true);
+            }
+        }
+        e.changedTouches = [{pageX: x, pageY: y }];
+        return !el.dispatchEvent(e);
+    };
+    
+    button = document.getElementById('button');
+    
+    button.addEventListener('touchstart', function (_this) {
+    	console.log('add event ts');
+        return function (e) {
+            return log('<b style=\'color:#A60\'>touchstart</b> on button', JSON.stringify(e.targetTouches));
+        };
+    }(this));
+    
+    button.addEventListener('touchend', function (_this) {
+    	console.log('add event te');
+        return function (e) {
+            return log('<b style=\'color:#A60\'>touchend</b> on button', JSON.stringify(e.changedTouches));
+        };
+    }(this));
+
+    touchStartOn(button, 5, 5);
+    touchEndOn(button, 10, 10);
+
+    touchStartOn(button, 5, 5);
+    touchEndOn(button, 10, 10);
+
+    touchStartOn(button, 5, 5);
+    touchEndOn(button, 10, 10);
+
+</script>
+
+
+</body>
+</html>
