@@ -114,7 +114,7 @@ function getByPath(obj, path) {
 
     return obj;
 }
-},{"./browser.utils":2,"./emitter":5,"./notify":18,"./socket":19,"./tab":20}],2:[function(require,module,exports){
+},{"./browser.utils":2,"./emitter":5,"./notify":22,"./socket":23,"./tab":24}],2:[function(require,module,exports){
 "use strict";
 
 var utils = exports;
@@ -836,7 +836,7 @@ exports._EventManager = function (cache) {
 
         if (data.handlers[type].length == 1) {
             if (document.addEventListener) {
-                elem.addEventListener(type, data.dispatcher, (bs && bs.options.capture) || false);
+                elem.addEventListener(type, data.dispatcher, (bs && typeof bs.options.capture !== "undefined")? bs.options.capture: true);
             }
             else if (document.attachEvent) {
                 elem.attachEvent("on" + type, data.dispatcher);
@@ -931,26 +931,9 @@ exports._EventManager = function (cache) {
  * Trigger an event on an element
  * @param elem
  * @param type
+ * @param name
+ * @param args
  */
-/*
-exports.triggerEvent = function(elem, type){
-    var evObj;
-
-    window.setTimeout(function () {
-        // IE
-        if (document.createEventObject){
-            evObj = document.createEventObject();
-            evObj.cancelBubble = true;
-            return elem.fireEvent("on" + type, evObj);
-        } else {
-            evObj = document.createEvent(type.toLowerCase() === "click"? "MouseEvents": "HTMLEvents");
-            evObj.initEvent(type, true, true);
-            return !elem.dispatchEvent(evObj);
-        }
-    }, 0);
-};
-*/
-
 exports.triggerEvent = function(elem, type, name, args){
     var evObj,
         addArgs = function(e, args) {
@@ -1102,13 +1085,11 @@ exports.browserEvent = function (bs) {
 exports.socketEvent = function (bs, eventManager) {
 
     return function (data) {
-        var elem;
-
         if (!bs.canSync(data, OPT_PATH) || bs.tabHidden) {
             return false;
         }
 
-        elem = bs.utils.getElementByXpath(data.xpath);
+        var elem = bs.utils.getElementByXpath(data.xpath);
 
         if (elem) {
             exports.canEmitEvents = false;
@@ -1117,6 +1098,145 @@ exports.socketEvent = function (bs, eventManager) {
     };
 };
 },{}],8:[function(require,module,exports){
+"use strict";
+
+/**
+ * This is the plugin for syncing clicks between browsers
+ * @type {string}
+ */
+var EVENT_NAME  = "select:change";
+var OPT_PATH    = "ghostMode.forms.change";
+exports.canEmitEvents = true;
+
+/**
+ * @param {BrowserSync} bs
+ * @param eventManager
+ */
+exports.init = function (bs, eventManager) {
+    eventManager.addEvent(document.body, "change", exports.browserEvent(bs));
+    bs.socket.on(EVENT_NAME, exports.socketEvent(bs, eventManager));
+};
+
+/**
+ * @param {BrowserSync} bs
+ * @returns {Function}
+ */
+exports.browserEvent = function (bs) {
+
+    return function (event) {
+
+        var elem = event.target || event.srcElement;
+        var data;
+
+        if (exports.canEmitEvents) {
+
+            if (elem.tagName === "SELECT") {
+
+                data = bs.utils.getElementData(elem);
+                data.value = elem.value;
+
+                bs.socket.emit(EVENT_NAME, data);
+            }
+
+        } else {
+            exports.canEmitEvents = true;
+        }
+    };
+};
+
+/**
+ * @param {BrowserSync} bs
+ * @returns {Function}
+ */
+exports.socketEvent = function (bs, eventManager) {
+
+    return function (data) {
+
+        if (!bs.canSync(data, OPT_PATH)) {
+            return false;
+        }
+
+        var elem = bs.utils.getElementByXpath(data.xpath);
+
+        if (elem && elem.tagName === "SELECT") {
+            elem.value = data.value;
+            eventManager.triggerChange(elem);
+            return elem;
+        }
+
+        return false;
+    };
+};
+},{}],9:[function(require,module,exports){
+"use strict";
+
+/**
+ * This is the plugin for syncing clicks between browsers
+ * @type {string}
+ */
+var EVENT_NAME = "contenteditable:input";
+var OPT_PATH = "ghostMode.forms.contenteditable";
+exports.canEmitEvents = true;
+
+/**
+ * @param {BrowserSync} bs
+ * @param eventManager
+ */
+exports.init = function (bs, eventManager) {
+    eventManager.addEvent(document.body, "input", exports.browserEvent(bs),bs);
+    bs.socket.on(EVENT_NAME, exports.socketEvent(bs, eventManager));
+};
+
+/**
+ * @param {BrowserSync} bs
+ * @returns {Function}
+ */
+exports.browserEvent = function (bs) {
+
+    return function (event) {
+
+        var elem = event.target || event.srcElement;
+        var data;
+
+        if (exports.canEmitEvents) {
+
+            if (elem.contentEditable === "true") {
+
+                data = bs.utils.getElementData(elem);
+                data.innerHTML = elem.innerHTML;
+
+                bs.socket.emit(EVENT_NAME, data);
+            }
+
+        } else {
+            exports.canEmitEvents = true;
+        }
+    };
+};
+
+/**
+ * @param {BrowserSync} bs
+ * @returns {Function}
+ */
+exports.socketEvent = function (bs) {
+
+    return function (data) {
+
+        if (!bs.canSync(data, OPT_PATH)) {
+            return false;
+        }
+
+        var elem = bs.utils.getElementByXpath(data.xpath);
+
+        if (elem && elem.contentEditable === "true") {
+            elem.innerHTML = data.innerHTML;
+            return elem;
+        }
+
+        return false;
+    };
+};
+},{}],10:[function(require,module,exports){
 "use strict";
 
 /**
@@ -1176,7 +1296,7 @@ exports.socketEvent = function (bs, eventManager) {
             return false;
         }
 
-        var elem = bs.utils.getSingleElement(data.tagName, data.index),
+        var elem = bs.utils.getElementByXpath(data.xpath),
             eventType;
 
         if (elem) {
@@ -1191,13 +1311,17 @@ exports.socketEvent = function (bs, eventManager) {
         return false;
     };
 };
-},{}],9:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 "use strict";
 
 exports.plugins = {
-    "inputs":  require("./ghostmode.forms.input"),
-    "toggles": require("./ghostmode.forms.toggles"),
-    "submit":  require("./ghostmode.forms.submit")
+    "inputs":           require("./ghostmode.forms.input"),
+    "change":           require("./ghostmode.forms.change"),
+    "toggles":          require("./ghostmode.forms.toggles"),
+    "submit":           require("./ghostmode.forms.submit"),
+    "keydown":          require("./ghostmode.forms.keydown.js"),
+    "keypress":         require("./ghostmode.forms.keypress.js"),
+    "contenteditable":  require("./ghostmode.forms.contenteditable.js")
 };
 
 /**
@@ -1227,7 +1351,157 @@ exports.init = function (bs, eventManager) {
         }
     }
 };
-},{"./ghostmode.forms.input":8,"./ghostmode.forms.submit":10,"./ghostmode.forms.toggles":11}],10:[function(require,module,exports){
+},{"./ghostmode.forms.change":8,"./ghostmode.forms.contenteditable.js":9,"./ghostmode.forms.input":10,"./ghostmode.forms.keydown.js":12,"./ghostmode.forms.keypress.js":13,"./ghostmode.forms.submit":14,"./ghostmode.forms.toggles":15}],12:[function(require,module,exports){
+"use strict";
+
+/**
+ * This is the plugin for syncing clicks between browsers
+ * @type {string}
+ */
+var EVENT_NAME = "input:keydown";
+var OPT_PATH = "ghostMode.forms.keydown";
+exports.canEmitEvents = true;
+
+/**
+ * @param {BrowserSync} bs
+ * @param eventManager
+ */
+exports.init = function (bs, eventManager) {
+    eventManager.addEvent(document.body, "keydown", exports.browserEvent(bs),bs);
+    bs.socket.on(EVENT_NAME, exports.socketEvent(bs, eventManager));
+};
+
+/**
+ * @param {BrowserSync} bs
+ * @returns {Function}
+ */
+exports.browserEvent = function (bs) {
+
+    return function (event) {
+
+        var elem = event.target || event.srcElement;
+        var data;
+
+        if (exports.canEmitEvents) {
+
+            if (elem.tagName === "INPUT") {
+
+                data = bs.utils.getElementData(elem);
+                data.keyCode = event.keyCode;
+
+                if (data.keyCode === 13) {
+                    bs.socket.emit(EVENT_NAME, data);
+                }
+            }
+
+        } else {
+            exports.canEmitEvents = true;
+        }
+    };
+};
+
+/**
+ * @param {BrowserSync} bs
+ * @returns {Function}
+ */
+exports.socketEvent = function (bs) {
+
+    return function (data) {
+
+        if (!bs.canSync(data, OPT_PATH)) {
+            return false;
+        }
+
+        var elem = bs.utils.getElementByXpath(data.xpath);
+
+        if (elem) {
+            var evt = document.createEvent("Events");
+            evt.initEvent("keydown", true, true);
+
+            evt.keyCode = data.keyCode;
+            elem.dispatchEvent(evt);
+            return elem;
+        }
+
+        return false;
+    };
+};
+},{}],13:[function(require,module,exports){
+"use strict";
+
+/**
+ * This is the plugin for syncing clicks between browsers
+ * @type {string}
+ */
+var EVENT_NAME = "input:keypress";
+var OPT_PATH = "ghostMode.forms.keypress";
+exports.canEmitEvents = true;
+
+/**
+ * @param {BrowserSync} bs
+ * @param eventManager
+ */
+exports.init = function (bs, eventManager) {
+    eventManager.addEvent(document.body, "keypress", exports.browserEvent(bs),bs);
+    bs.socket.on(EVENT_NAME, exports.socketEvent(bs, eventManager));
+};
+
+/**
+ * @param {BrowserSync} bs
+ * @returns {Function}
+ */
+exports.browserEvent = function (bs) {
+
+    return function (event) {
+
+        var elem = event.target || event.srcElement;
+        var data;
+
+        if (exports.canEmitEvents) {
+
+            if (elem.tagName === "INPUT") {
+
+                data = bs.utils.getElementData(elem);
+                data.keyCode = event.keyCode;
+
+                if (data.keyCode === 13) {
+                    bs.socket.emit(EVENT_NAME, data);
+                }
+            }
+
+        } else {
+            exports.canEmitEvents = true;
+        }
+    };
+};
+
+/**
+ * @param {BrowserSync} bs
+ * @returns {Function}
+ */
+exports.socketEvent = function (bs) {
+
+    return function (data) {
+
+        if (!bs.canSync(data, OPT_PATH)) {
+            return false;
+        }
+
+        var elem = bs.utils.getElementByXpath(data.xpath);
+
+        if (elem) {
+            var evt = document.createEvent("Events");
+            evt.initEvent("keypress", true, true);
+
+            evt.keyCode = data.keyCode;
+            elem.dispatchEvent(evt);
+            return elem;
+        }
+
+        return false;
+    };
+};
+},{}],14:[function(require,module,exports){
 "use strict";
 
 /**
@@ -1279,7 +1553,7 @@ exports.socketEvent = function (bs) {
             return false;
         }
 
-        var elem = bs.utils.getSingleElement(data.tagName, data.index);
+        var elem = bs.utils.getElementByXpath(data.xpath);
 
         exports.canEmitEvents = false;
 
@@ -1293,7 +1567,7 @@ exports.socketEvent = function (bs) {
         return false;
     };
 };
-},{}],11:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 "use strict";
 
 /**
@@ -1372,7 +1646,7 @@ exports.socketEvent = function (bs) {
 
         exports.canEmitEvents = false;
 
-        var elem = bs.utils.getSingleElement(data.tagName, data.index);
+        var elem = bs.utils.getElementByXpath(data.xpath);
 
         if (elem) {
             if (data.type === "radio") {
@@ -1389,18 +1663,18 @@ exports.socketEvent = function (bs) {
         return false;
     };
 };
-},{}],12:[function(require,module,exports){
+},{}],16:[function(require,module,exports){
 "use strict";
 
 var eventManager = require("./events").manager;
 
 exports.plugins = {
-    "scroll":   require("./ghostmode.scroll"),
-    "clicks":   require("./ghostmode.clicks"),
-    "forms":    require("./ghostmode.forms"),
-	"location": require("./ghostmode.location"),
-	"mouseup": require("./ghostmode.mouseup"),
-	"mousedown": require("./ghostmode.mousedown")
+	"scroll":		require("./ghostmode.scroll"),
+	"clicks":		require("./ghostmode.clicks"),
+	"forms":		require("./ghostmode.forms"),
+	"location":		require("./ghostmode.location"),
+	"mouseup":		require("./ghostmode.mouseup"),
+	"mousedown":	require("./ghostmode.mousedown")
 };
 
 /**
@@ -1408,11 +1682,11 @@ exports.plugins = {
  * @param bs
  */
 exports.init = function (bs) {
-    for (var name in exports.plugins) {
-        exports.plugins[name].init(bs, eventManager);
-    }
+	for (var name in exports.plugins) {
+		exports.plugins[name].init(bs, eventManager);
+	}
 };
-},{"./events":6,"./ghostmode.clicks":7,"./ghostmode.forms":9,"./ghostmode.location":13,"./ghostmode.mousedown":14,"./ghostmode.mouseup":15,"./ghostmode.scroll":16}],13:[function(require,module,exports){
+},{"./events":6,"./ghostmode.clicks":7,"./ghostmode.forms":11,"./ghostmode.location":17,"./ghostmode.mousedown":18,"./ghostmode.mouseup":19,"./ghostmode.scroll":20}],17:[function(require,module,exports){
 "use strict";
 
 /**
@@ -1462,7 +1736,7 @@ exports.setUrl = function (url) {
 exports.setPath = function (path) {
     window.location = window.location.protocol + "//" + window.location.host + path;
 };
-},{}],14:[function(require,module,exports){
+},{}],18:[function(require,module,exports){
 "use strict";
 
 /**
@@ -1495,6 +1769,8 @@ exports.browserEvent = function (bs) {
 
             var elem = event.target || event.srcElement;
 
+            console.log('mousedown', elem);
+
             if (elem.type === "checkbox" || elem.type === "radio") {
                 bs.utils.forceChange(elem);
                 return;
@@ -1517,19 +1793,21 @@ exports.socketEvent = function (bs, eventManager) {
 
     return function (data) {
 
+        console.log('socket md', data);
+
         if (!bs.canSync(data, OPT_PATH)) {
             return false;
         }
 
-        var elem = bs.utils.getSingleElement(data.tagName, data.index);
+        var elem = bs.utils.getElementByXpath(data.xpath);
 
         if (elem) {
             exports.canEmitEvents = false;
-            eventManager.triggerMouseUpDown(elem,"mousedown");
+            eventManager.triggerMouseUpDown(elem, EVENT_NAME);
         }
     };
 };
-},{}],15:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 "use strict";
 
 /**
@@ -1588,7 +1866,7 @@ exports.socketEvent = function (bs, eventManager) {
             return false;
         }
 
-        var elem = bs.utils.getSingleElement(data.tagName, data.index);
+        var elem = bs.utils.getElementByXpath(data.xpath);
 
         if (elem) {
             exports.canEmitEvents = false;
@@ -1596,7 +1874,7 @@ exports.socketEvent = function (bs, eventManager) {
         }
     };
 };
-},{}],16:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 "use strict";
 
 /**
@@ -1770,7 +2048,7 @@ exports.getScrollTopPercentage = function (pos) {
     var percentage  = exports.getScrollPercentage(scrollSpace, pos);
     return percentage.y;
 };
-},{}],17:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 "use strict";
 
 var socket       = require("./socket");
@@ -1849,7 +2127,7 @@ if (window.__karma__) {
     window.__bs_index__      = exports;
 }
 /**debug:end**/
-},{"./browser-sync":1,"./browser.utils":2,"./client-shims":3,"./code-sync":4,"./emitter":5,"./events":6,"./ghostmode":12,"./ghostmode.clicks":7,"./ghostmode.forms":9,"./ghostmode.forms.input":8,"./ghostmode.forms.submit":10,"./ghostmode.forms.toggles":11,"./ghostmode.location":13,"./ghostmode.scroll":16,"./notify":18,"./socket":19,"./wgxpath.install":21}],18:[function(require,module,exports){
+},{"./browser-sync":1,"./browser.utils":2,"./client-shims":3,"./code-sync":4,"./emitter":5,"./events":6,"./ghostmode":16,"./ghostmode.clicks":7,"./ghostmode.forms":11,"./ghostmode.forms.input":10,"./ghostmode.forms.submit":14,"./ghostmode.forms.toggles":15,"./ghostmode.location":17,"./ghostmode.scroll":20,"./notify":22,"./socket":23,"./wgxpath.install":25}],22:[function(require,module,exports){
 "use strict";
 
 var scroll = require("./ghostmode.scroll");
@@ -1989,7 +2267,7 @@ exports.flash = function (message, timeout) {
 
     return elem;
 };
-},{"./browser.utils":2,"./ghostmode.scroll":16}],19:[function(require,module,exports){
+},{"./browser.utils":2,"./ghostmode.scroll":20}],23:[function(require,module,exports){
 "use strict";
 
 /**
@@ -2030,7 +2308,7 @@ exports.emit = function (name, data) {
 exports.on = function (name, func) {
     exports.socket.on(name, func);
 };
-},{}],20:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 var utils        = require("./browser.utils");
 var emitter      = require("./emitter");
 var $document    = utils.getDocument();
@@ -2067,7 +2345,7 @@ if (typeof $document.addEventListener === "undefined" ||
 } else {
     $document.addEventListener(visibilityChange, handleVisibilityChange, false);
 }
-},{"./browser.utils":2,"./emitter":5}],21:[function(require,module,exports){
+},{"./browser.utils":2,"./emitter":5}],25:[function(require,module,exports){
 /* jshint ignore:start */
 (function(){function h(a){return function(){return this[a]}}function l(a){return function(){return a}}var m=this;
 function ba(a){var b=typeof a;if("object"==b)if(a){if(a instanceof Array)return"array";if(a instanceof Object)return b;var c=Object.prototype.toString.call(a);if("[object Window]"==c)return"object";if("[object Array]"==c||"number"==typeof a.length&&"undefined"!=typeof a.splice&&"undefined"!=typeof a.propertyIsEnumerable&&!a.propertyIsEnumerable("splice"))return"array";if("[object Function]"==c||"undefined"!=typeof a.call&&"undefined"!=typeof a.propertyIsEnumerable&&!a.propertyIsEnumerable("call"))return"function"}else return"null";
@@ -2146,4 +2424,4 @@ M(a);c=[];for(var e=N(d);e;e=N(d))c.push(e instanceof C?e.a:e);this.snapshotLeng
 0>a?null:c[a]}}Y.ANY_TYPE=0;Y.NUMBER_TYPE=1;Y.STRING_TYPE=2;Y.BOOLEAN_TYPE=3;Y.UNORDERED_NODE_ITERATOR_TYPE=4;Y.ORDERED_NODE_ITERATOR_TYPE=5;Y.UNORDERED_NODE_SNAPSHOT_TYPE=6;Y.ORDERED_NODE_SNAPSHOT_TYPE=7;Y.ANY_UNORDERED_NODE_TYPE=8;Y.FIRST_ORDERED_NODE_TYPE=9;function Qb(a){this.lookupNamespaceURI=Za(a)}
 function Rb(a){a=a||m;var b=a.document;b.evaluate||(a.XPathResult=Y,b.evaluate=function(a,b,e,f){return(new Pb(a,e)).evaluate(b,f)},b.createExpression=function(a,b){return new Pb(a,b)},b.createNSResolver=function(a){return new Qb(a)})}var Sb=["wgxpath","install"],Z=m;Sb[0]in Z||!Z.execScript||Z.execScript("var "+Sb[0]);for(var Tb;Sb.length&&(Tb=Sb.shift());)Sb.length||void 0===Rb?Z[Tb]?Z=Z[Tb]:Z=Z[Tb]={}:Z[Tb]=Rb;})()
 /* jshint ignore:end */
-},{}]},{},[17]);
+},{}]},{},[21]);
