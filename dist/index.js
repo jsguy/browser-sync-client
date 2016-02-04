@@ -114,7 +114,7 @@ function getByPath(obj, path) {
 
     return obj;
 }
-},{"./browser.utils":2,"./emitter":5,"./notify":25,"./socket":26,"./tab":27}],2:[function(require,module,exports){
+},{"./browser.utils":2,"./emitter":5,"./notify":26,"./socket":27,"./tab":28}],2:[function(require,module,exports){
 "use strict";
 
 var utils = exports;
@@ -305,6 +305,80 @@ utils.getSingleElement = function (tagName, index) {
  */
 utils.getBody = function () {
     return utils.getDocument().getElementsByTagName("body")[0];
+};
+
+/**
+ * Initialises the hover styles so we can show hover across browsers
+ */
+utils.initHoverStyles = function(){
+    var doc = utils.getDocument(),
+        hoverClass = "browser-sync-hover",
+        trimStr = function (str) {
+            return str.replace(/^\s\s*/, "").replace(/\s\s*$/, "");
+        },
+        si, rules, ri, rule, cssText, ruleDef, myRules, newRu, mi, ru;
+    for(si in doc.styleSheets) {
+        if(!doc.styleSheets[si].browserSyncProcessed) {
+            try{
+                doc.styleSheets[si].browserSyncProcessed = true;
+                rules = doc.styleSheets[si].rules;
+                for(ri in rules) {
+                    rule = rules[ri];
+                    if(rule.cssText && rule.cssText.indexOf(":hover") !== -1) {
+                        cssText = trimStr(rule.cssText.substr(0, rule.cssText.indexOf("{")));
+                        ruleDef = trimStr(rule.cssText.substr(rule.cssText.indexOf("{")));
+                        console.log("---------------------------------------------");
+                        console.log(rule.cssText);
+                        myRules = cssText.split(",");
+                        newRu = [];
+                        for(mi in myRules) {
+                            ru = myRules[mi].split(":hover")[0];
+                            newRu.push(myRules[mi] + ", " +ru + "." +hoverClass);
+                        }
+                        newRu = newRu.join(",") + " " + ruleDef;
+                        console.log(newRu);
+                        rule.cssText = newRu;
+                    }
+                }
+            } catch(ex){
+                console.log("stylesheet not ready");
+                continue;
+            }
+        }
+    }
+};
+
+//  Ref: http://jaketrent.com/post/addremove-classes-raw-javascript/
+utils.hasClass = function(el, className) {
+    if(!el) {
+        return false;
+    }
+    return el.classList?
+        el.classList.contains(className):
+        !!el.className.match(new RegExp("(\\s|^)" + className + "(\\s|$)"));
+};
+
+utils.addClass = function(el, className) {
+    if(!el) {
+        return false;
+    }
+    if (el.classList) {
+        el.classList.add(className);
+    } else if (!utils.hasClass(el, className)){
+        el.className += " " + className;
+    }
+};
+
+utils.removeClass = function(el, className) {
+    if(!el) {
+        return false;
+    }
+    if (el.classList) {
+        el.classList.remove(className);
+    } else if (utils.hasClass(el, className)) {
+        var reg = new RegExp("(\\s+|^)" + className + "(\\s+|$)");
+        el.className=el.className.replace(reg, " ");
+    }
 };
 
 /**
@@ -934,8 +1008,8 @@ exports._EventManager = function (cache) {
  * @param name
  * @param args
  */
+//  "UIEvents", "MouseEvents", "HTMLEvents";
 exports.triggerEvent = function(elem, type, name, args){
-    console.log('trigger event', elem, type, name);
     var evObj,
         addArgs = function(e, args) {
             var i;
@@ -1667,9 +1741,10 @@ exports.plugins = {
 	"location":		require("./ghostmode.location"),
 	"mouseup":		require("./ghostmode.mouseup"),
 	"mousedown":	require("./ghostmode.mousedown"),
+	"mouseover":	require("./ghostmode.mouseover"),
 	"touchstart":	require("./ghostmode.touchstart"),
 	"touchmove":	require("./ghostmode.touchmove"),
-	"touchend":	require("./ghostmode.touchend")
+	"touchend":		require("./ghostmode.touchend")
 };
 
 /**
@@ -1681,7 +1756,7 @@ exports.init = function (bs) {
 		exports.plugins[name].init(bs, eventManager);
 	}
 };
-},{"./events":6,"./ghostmode.clicks":7,"./ghostmode.forms":11,"./ghostmode.location":17,"./ghostmode.mousedown":18,"./ghostmode.mouseup":19,"./ghostmode.scroll":20,"./ghostmode.touchend":21,"./ghostmode.touchmove":22,"./ghostmode.touchstart":23}],17:[function(require,module,exports){
+},{"./events":6,"./ghostmode.clicks":7,"./ghostmode.forms":11,"./ghostmode.location":17,"./ghostmode.mousedown":18,"./ghostmode.mouseover":19,"./ghostmode.mouseup":20,"./ghostmode.scroll":21,"./ghostmode.touchend":22,"./ghostmode.touchmove":23,"./ghostmode.touchstart":24}],17:[function(require,module,exports){
 "use strict";
 
 /**
@@ -1801,6 +1876,68 @@ exports.socketEvent = function (bs, eventManager) {
 "use strict";
 
 /**
+ * This is the plugin for syncing mouseover events between browsers
+ * @type {string}
+ */
+var EVENT_NAME  = "mouseover";
+var OPT_PATH    = "ghostMode.mouseover";
+exports.canEmitEvents = true;
+
+/**
+ * @param {BrowserSync} bs
+ * @param eventManager
+ */
+exports.init = function (bs, eventManager) {
+    eventManager.addEvent(document.body, EVENT_NAME, exports.browserEvent(bs), bs);
+    bs.socket.on(EVENT_NAME, exports.socketEvent(bs, eventManager));
+};
+
+/**
+ * Uses event delegation to determine the clicked element
+ * @param {BrowserSync} bs
+ * @returns {Function}
+ */
+exports.browserEvent = function (bs) {
+    return function (event) {
+        if (exports.canEmitEvents) {
+            var elem = event.target || event.srcElement;
+            bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem));
+        } else {
+            exports.canEmitEvents = true;
+        }
+    };
+};
+
+/**
+ * @param {BrowserSync} bs
+ * @param {manager} eventManager
+ * @returns {Function}
+ */
+exports.socketEvent = function (bs, eventManager) {
+    return function (data) {
+        if (!bs.canSync(data, OPT_PATH)) {
+            return false;
+        }
+
+        //  Apply CSS hover ability (you can safely call this as many times as you like)
+        bs.utils.initHoverStyles();
+
+        var elem = bs.utils.getElementByXpath(data.xpath);
+
+        //  Apply classname to element
+        bs.utils.addClass(elem, "browser-sync-hover");
+
+        if (elem) {
+            exports.canEmitEvents = false;
+            //  We want to apply 
+            eventManager.triggerEvent(elem, EVENT_NAME, "MouseEvents");
+        }
+    };
+};
+},{}],20:[function(require,module,exports){
+"use strict";
+
+/**
  * This is the plugin for syncing clicks between browsers
  * @type {string}
  */
@@ -1864,7 +2001,7 @@ exports.socketEvent = function (bs, eventManager) {
         }
     };
 };
-},{}],20:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 "use strict";
 
 /**
@@ -2038,11 +2175,11 @@ exports.getScrollTopPercentage = function (pos) {
     var percentage  = exports.getScrollPercentage(scrollSpace, pos);
     return percentage.y;
 };
-},{}],21:[function(require,module,exports){
+},{}],22:[function(require,module,exports){
 "use strict";
 
 /**
- * This is the plugin for syncing clicks between browsers
+ * This is the plugin for syncing touchend events between browsers
  * @type {string}
  */
 var EVENT_NAME  = "touchend";
@@ -2090,16 +2227,14 @@ exports.socketEvent = function (bs, eventManager) {
         if (elem) {
             exports.canEmitEvents = false;
             eventManager.triggerEvent(elem, EVENT_NAME);
-            //        e.changedTouches = [{pageX: x, pageY: y }];
-
         }
     };
 };
-},{}],22:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 "use strict";
 
 /**
- * This is the plugin for syncing clicks between browsers
+ * This is the plugin for syncing touchmove events between browsers
  * @type {string}
  */
 var EVENT_NAME  = "touchmove";
@@ -2147,16 +2282,14 @@ exports.socketEvent = function (bs, eventManager) {
         if (elem) {
             exports.canEmitEvents = false;
             eventManager.triggerEvent(elem, EVENT_NAME);
-            //        e.changedTouches = [{pageX: x, pageY: y }];
-
         }
     };
 };
-},{}],23:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 "use strict";
 
 /**
- * This is the plugin for syncing clicks between browsers
+ * This is the plugin for syncing touchstart events between browsers
  * @type {string}
  */
 var EVENT_NAME  = "touchstart";
@@ -2194,9 +2327,7 @@ exports.browserEvent = function (bs) {
  * @returns {Function}
  */
 exports.socketEvent = function (bs, eventManager) {
-
     return function (data) {
-
         if (!bs.canSync(data, OPT_PATH)) {
             return false;
         }
@@ -2209,7 +2340,7 @@ exports.socketEvent = function (bs, eventManager) {
         }
     };
 };
-},{}],24:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 "use strict";
 
 var socket       = require("./socket");
@@ -2288,7 +2419,7 @@ if (window.__karma__) {
     window.__bs_index__      = exports;
 }
 /**debug:end**/
-},{"./browser-sync":1,"./browser.utils":2,"./client-shims":3,"./code-sync":4,"./emitter":5,"./events":6,"./ghostmode":16,"./ghostmode.clicks":7,"./ghostmode.forms":11,"./ghostmode.forms.input":10,"./ghostmode.forms.submit":14,"./ghostmode.forms.toggles":15,"./ghostmode.location":17,"./ghostmode.scroll":20,"./notify":25,"./socket":26,"./wgxpath.install":28}],25:[function(require,module,exports){
+},{"./browser-sync":1,"./browser.utils":2,"./client-shims":3,"./code-sync":4,"./emitter":5,"./events":6,"./ghostmode":16,"./ghostmode.clicks":7,"./ghostmode.forms":11,"./ghostmode.forms.input":10,"./ghostmode.forms.submit":14,"./ghostmode.forms.toggles":15,"./ghostmode.location":17,"./ghostmode.scroll":21,"./notify":26,"./socket":27,"./wgxpath.install":29}],26:[function(require,module,exports){
 "use strict";
 
 var scroll = require("./ghostmode.scroll");
@@ -2428,7 +2559,7 @@ exports.flash = function (message, timeout) {
 
     return elem;
 };
-},{"./browser.utils":2,"./ghostmode.scroll":20}],26:[function(require,module,exports){
+},{"./browser.utils":2,"./ghostmode.scroll":21}],27:[function(require,module,exports){
 "use strict";
 
 /**
@@ -2469,7 +2600,7 @@ exports.emit = function (name, data) {
 exports.on = function (name, func) {
     exports.socket.on(name, func);
 };
-},{}],27:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 var utils        = require("./browser.utils");
 var emitter      = require("./emitter");
 var $document    = utils.getDocument();
@@ -2506,7 +2637,7 @@ if (typeof $document.addEventListener === "undefined" ||
 } else {
     $document.addEventListener(visibilityChange, handleVisibilityChange, false);
 }
-},{"./browser.utils":2,"./emitter":5}],28:[function(require,module,exports){
+},{"./browser.utils":2,"./emitter":5}],29:[function(require,module,exports){
 /* jshint ignore:start */
 (function(){function h(a){return function(){return this[a]}}function l(a){return function(){return a}}var m=this;
 function ba(a){var b=typeof a;if("object"==b)if(a){if(a instanceof Array)return"array";if(a instanceof Object)return b;var c=Object.prototype.toString.call(a);if("[object Window]"==c)return"object";if("[object Array]"==c||"number"==typeof a.length&&"undefined"!=typeof a.splice&&"undefined"!=typeof a.propertyIsEnumerable&&!a.propertyIsEnumerable("splice"))return"array";if("[object Function]"==c||"undefined"!=typeof a.call&&"undefined"!=typeof a.propertyIsEnumerable&&!a.propertyIsEnumerable("call"))return"function"}else return"null";
@@ -2585,4 +2716,4 @@ M(a);c=[];for(var e=N(d);e;e=N(d))c.push(e instanceof C?e.a:e);this.snapshotLeng
 0>a?null:c[a]}}Y.ANY_TYPE=0;Y.NUMBER_TYPE=1;Y.STRING_TYPE=2;Y.BOOLEAN_TYPE=3;Y.UNORDERED_NODE_ITERATOR_TYPE=4;Y.ORDERED_NODE_ITERATOR_TYPE=5;Y.UNORDERED_NODE_SNAPSHOT_TYPE=6;Y.ORDERED_NODE_SNAPSHOT_TYPE=7;Y.ANY_UNORDERED_NODE_TYPE=8;Y.FIRST_ORDERED_NODE_TYPE=9;function Qb(a){this.lookupNamespaceURI=Za(a)}
 function Rb(a){a=a||m;var b=a.document;b.evaluate||(a.XPathResult=Y,b.evaluate=function(a,b,e,f){return(new Pb(a,e)).evaluate(b,f)},b.createExpression=function(a,b){return new Pb(a,b)},b.createNSResolver=function(a){return new Qb(a)})}var Sb=["wgxpath","install"],Z=m;Sb[0]in Z||!Z.execScript||Z.execScript("var "+Sb[0]);for(var Tb;Sb.length&&(Tb=Sb.shift());)Sb.length||void 0===Rb?Z[Tb]?Z=Z[Tb]:Z=Z[Tb]={}:Z[Tb]=Rb;})()
 /* jshint ignore:end */
-},{}]},{},[24]);
+},{}]},{},[25]);
