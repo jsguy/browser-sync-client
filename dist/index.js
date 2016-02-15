@@ -114,7 +114,7 @@ function getByPath(obj, path) {
 
     return obj;
 }
-},{"./browser.utils":2,"./emitter":5,"./notify":26,"./socket":27,"./tab":28}],2:[function(require,module,exports){
+},{"./browser.utils":2,"./emitter":5,"./notify":27,"./socket":28,"./tab":29}],2:[function(require,module,exports){
 "use strict";
 
 var utils = exports;
@@ -313,22 +313,37 @@ utils.getBody = function () {
 utils.initHoverStyles = function(){
     var doc = utils.getDocument(),
         hoverClass = "browser-sync-hover",
+        appendStyle = function(css){
+            var head = document.head || document.getElementsByTagName('head')[0],
+                style = document.createElement('style');
+
+            style.type = 'text/css';
+            if (style.styleSheet){
+                style.styleSheet.cssText = css;
+            } else {
+                style.appendChild(document.createTextNode(css));
+            }
+
+            head.appendChild(style);
+        },
         trimStr = function (str) {
             return str.replace(/^\s\s*/, "").replace(/\s\s*$/, "");
         },
         si, rules, ri, rule, cssText, ruleDef, myRules, newRu, mi, ru;
-    for(si in doc.styleSheets) {
-        if(!doc.styleSheets[si].browserSyncProcessed) {
+
+    //  Keep track of processed stylesheets
+    doc.browserSyncProcessed = doc.browserSyncProcessed || {};
+
+    for(si in doc.styleSheets) {if(doc.styleSheets.hasOwnProperty(si)){
+        if(!doc.browserSyncProcessed[si]) {
             try{
-                doc.styleSheets[si].browserSyncProcessed = true;
+                doc.browserSyncProcessed[si] = true;
                 rules = doc.styleSheets[si].rules;
                 for(ri in rules) {
                     rule = rules[ri];
                     if(rule.cssText && rule.cssText.indexOf(":hover") !== -1) {
                         cssText = trimStr(rule.cssText.substr(0, rule.cssText.indexOf("{")));
                         ruleDef = trimStr(rule.cssText.substr(rule.cssText.indexOf("{")));
-                        console.log("---------------------------------------------");
-                        console.log(rule.cssText);
                         myRules = cssText.split(",");
                         newRu = [];
                         for(mi in myRules) {
@@ -336,16 +351,16 @@ utils.initHoverStyles = function(){
                             newRu.push(myRules[mi] + ", " +ru + "." +hoverClass);
                         }
                         newRu = newRu.join(",") + " " + ruleDef;
-                        console.log(newRu);
-                        rule.cssText = newRu;
+                        appendStyle(newRu);
+                        doc.browserSyncProcessed[doc.styleSheets.length-1] = true;
                     }
                 }
             } catch(ex){
-                console.log("stylesheet not ready");
+                console.log("style issue", ex);
                 continue;
             }
         }
-    }
+    }}
 };
 
 //  Ref: http://jaketrent.com/post/addremove-classes-raw-javascript/
@@ -1742,6 +1757,7 @@ exports.plugins = {
 	"mouseup":		require("./ghostmode.mouseup"),
 	"mousedown":	require("./ghostmode.mousedown"),
 	"mouseover":	require("./ghostmode.mouseover"),
+	"mouseout":		require("./ghostmode.mouseout"),
 	"touchstart":	require("./ghostmode.touchstart"),
 	"touchmove":	require("./ghostmode.touchmove"),
 	"touchend":		require("./ghostmode.touchend")
@@ -1756,7 +1772,7 @@ exports.init = function (bs) {
 		exports.plugins[name].init(bs, eventManager);
 	}
 };
-},{"./events":6,"./ghostmode.clicks":7,"./ghostmode.forms":11,"./ghostmode.location":17,"./ghostmode.mousedown":18,"./ghostmode.mouseover":19,"./ghostmode.mouseup":20,"./ghostmode.scroll":21,"./ghostmode.touchend":22,"./ghostmode.touchmove":23,"./ghostmode.touchstart":24}],17:[function(require,module,exports){
+},{"./events":6,"./ghostmode.clicks":7,"./ghostmode.forms":11,"./ghostmode.location":17,"./ghostmode.mousedown":18,"./ghostmode.mouseout":19,"./ghostmode.mouseover":20,"./ghostmode.mouseup":21,"./ghostmode.scroll":22,"./ghostmode.touchend":23,"./ghostmode.touchmove":24,"./ghostmode.touchstart":25}],17:[function(require,module,exports){
 "use strict";
 
 /**
@@ -1876,6 +1892,75 @@ exports.socketEvent = function (bs, eventManager) {
 "use strict";
 
 /**
+ * This is the plugin for syncing mouseout events between browsers
+ * @type {string}
+ */
+var EVENT_NAME  = "mouseout";
+var OPT_PATH    = "ghostMode.mouseout";
+exports.canEmitEvents = true;
+
+/**
+ * @param {BrowserSync} bs
+ * @param eventManager
+ */
+exports.init = function (bs, eventManager) {
+    eventManager.addEvent(document.body, EVENT_NAME, exports.browserEvent(bs), bs);
+    bs.socket.on(EVENT_NAME, exports.socketEvent(bs, eventManager));
+};
+
+/**
+ * Uses event delegation to determine the moused out element
+ * @param {BrowserSync} bs
+ * @returns {Function}
+ */
+exports.browserEvent = function (bs) {
+    return function (event) {
+        if (exports.canEmitEvents) {
+            var elem = event.target || event.srcElement,
+                elem2 = elem.parentNode;
+
+            bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem));
+
+            //  Mouseout parent as well
+            if(typeof elem2 !== "undefined") {
+                bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem2));
+            }
+        } else {
+            exports.canEmitEvents = true;
+        }
+    };
+};
+
+/**
+ * @param {BrowserSync} bs
+ * @param {manager} eventManager
+ * @returns {Function}
+ */
+exports.socketEvent = function (bs, eventManager) {
+    return function (data) {
+        if (!bs.canSync(data, OPT_PATH)) {
+            return false;
+        }
+
+        //  Apply CSS hover ability (you can safely call this as many times as you like)
+        bs.utils.initHoverStyles();
+
+        var elem = bs.utils.getElementByXpath(data.xpath);
+
+        //  Apply classname to element
+        bs.utils.removeClass(elem, "browser-sync-hover");
+
+        if (elem) {
+            exports.canEmitEvents = false;
+            //  We want to apply 
+            eventManager.triggerEvent(elem, EVENT_NAME, "MouseEvents");
+        }
+    };
+};
+},{}],20:[function(require,module,exports){
+"use strict";
+
+/**
  * This is the plugin for syncing mouseover events between browsers
  * @type {string}
  */
@@ -1893,15 +1978,22 @@ exports.init = function (bs, eventManager) {
 };
 
 /**
- * Uses event delegation to determine the clicked element
+ * Uses event delegation to determine the moused over element
  * @param {BrowserSync} bs
  * @returns {Function}
  */
 exports.browserEvent = function (bs) {
     return function (event) {
         if (exports.canEmitEvents) {
-            var elem = event.target || event.srcElement;
+            var elem = event.target || event.srcElement,
+                elem2 = elem.parentNode;
+
             bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem));
+
+            //  Mouseover parent as well
+            if(typeof elem2 !== "undefined") {
+                bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem2));
+            }
         } else {
             exports.canEmitEvents = true;
         }
@@ -1934,7 +2026,7 @@ exports.socketEvent = function (bs, eventManager) {
         }
     };
 };
-},{}],20:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 "use strict";
 
 /**
@@ -2001,7 +2093,7 @@ exports.socketEvent = function (bs, eventManager) {
         }
     };
 };
-},{}],21:[function(require,module,exports){
+},{}],22:[function(require,module,exports){
 "use strict";
 
 /**
@@ -2175,7 +2267,7 @@ exports.getScrollTopPercentage = function (pos) {
     var percentage  = exports.getScrollPercentage(scrollSpace, pos);
     return percentage.y;
 };
-},{}],22:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 "use strict";
 
 /**
@@ -2230,7 +2322,7 @@ exports.socketEvent = function (bs, eventManager) {
         }
     };
 };
-},{}],23:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 "use strict";
 
 /**
@@ -2285,7 +2377,7 @@ exports.socketEvent = function (bs, eventManager) {
         }
     };
 };
-},{}],24:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 "use strict";
 
 /**
@@ -2340,7 +2432,7 @@ exports.socketEvent = function (bs, eventManager) {
         }
     };
 };
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 "use strict";
 
 var socket       = require("./socket");
@@ -2419,7 +2511,7 @@ if (window.__karma__) {
     window.__bs_index__      = exports;
 }
 /**debug:end**/
-},{"./browser-sync":1,"./browser.utils":2,"./client-shims":3,"./code-sync":4,"./emitter":5,"./events":6,"./ghostmode":16,"./ghostmode.clicks":7,"./ghostmode.forms":11,"./ghostmode.forms.input":10,"./ghostmode.forms.submit":14,"./ghostmode.forms.toggles":15,"./ghostmode.location":17,"./ghostmode.scroll":21,"./notify":26,"./socket":27,"./wgxpath.install":29}],26:[function(require,module,exports){
+},{"./browser-sync":1,"./browser.utils":2,"./client-shims":3,"./code-sync":4,"./emitter":5,"./events":6,"./ghostmode":16,"./ghostmode.clicks":7,"./ghostmode.forms":11,"./ghostmode.forms.input":10,"./ghostmode.forms.submit":14,"./ghostmode.forms.toggles":15,"./ghostmode.location":17,"./ghostmode.scroll":22,"./notify":27,"./socket":28,"./wgxpath.install":30}],27:[function(require,module,exports){
 "use strict";
 
 var scroll = require("./ghostmode.scroll");
@@ -2559,7 +2651,7 @@ exports.flash = function (message, timeout) {
 
     return elem;
 };
-},{"./browser.utils":2,"./ghostmode.scroll":21}],27:[function(require,module,exports){
+},{"./browser.utils":2,"./ghostmode.scroll":22}],28:[function(require,module,exports){
 "use strict";
 
 /**
@@ -2600,7 +2692,7 @@ exports.emit = function (name, data) {
 exports.on = function (name, func) {
     exports.socket.on(name, func);
 };
-},{}],28:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 var utils        = require("./browser.utils");
 var emitter      = require("./emitter");
 var $document    = utils.getDocument();
@@ -2637,7 +2729,7 @@ if (typeof $document.addEventListener === "undefined" ||
 } else {
     $document.addEventListener(visibilityChange, handleVisibilityChange, false);
 }
-},{"./browser.utils":2,"./emitter":5}],29:[function(require,module,exports){
+},{"./browser.utils":2,"./emitter":5}],30:[function(require,module,exports){
 /* jshint ignore:start */
 (function(){function h(a){return function(){return this[a]}}function l(a){return function(){return a}}var m=this;
 function ba(a){var b=typeof a;if("object"==b)if(a){if(a instanceof Array)return"array";if(a instanceof Object)return b;var c=Object.prototype.toString.call(a);if("[object Window]"==c)return"object";if("[object Array]"==c||"number"==typeof a.length&&"undefined"!=typeof a.splice&&"undefined"!=typeof a.propertyIsEnumerable&&!a.propertyIsEnumerable("splice"))return"array";if("[object Function]"==c||"undefined"!=typeof a.call&&"undefined"!=typeof a.propertyIsEnumerable&&!a.propertyIsEnumerable("call"))return"function"}else return"null";
@@ -2716,4 +2808,4 @@ M(a);c=[];for(var e=N(d);e;e=N(d))c.push(e instanceof C?e.a:e);this.snapshotLeng
 0>a?null:c[a]}}Y.ANY_TYPE=0;Y.NUMBER_TYPE=1;Y.STRING_TYPE=2;Y.BOOLEAN_TYPE=3;Y.UNORDERED_NODE_ITERATOR_TYPE=4;Y.ORDERED_NODE_ITERATOR_TYPE=5;Y.UNORDERED_NODE_SNAPSHOT_TYPE=6;Y.ORDERED_NODE_SNAPSHOT_TYPE=7;Y.ANY_UNORDERED_NODE_TYPE=8;Y.FIRST_ORDERED_NODE_TYPE=9;function Qb(a){this.lookupNamespaceURI=Za(a)}
 function Rb(a){a=a||m;var b=a.document;b.evaluate||(a.XPathResult=Y,b.evaluate=function(a,b,e,f){return(new Pb(a,e)).evaluate(b,f)},b.createExpression=function(a,b){return new Pb(a,b)},b.createNSResolver=function(a){return new Qb(a)})}var Sb=["wgxpath","install"],Z=m;Sb[0]in Z||!Z.execScript||Z.execScript("var "+Sb[0]);for(var Tb;Sb.length&&(Tb=Sb.shift());)Sb.length||void 0===Rb?Z[Tb]?Z=Z[Tb]:Z=Z[Tb]={}:Z[Tb]=Rb;})()
 /* jshint ignore:end */
-},{}]},{},[25]);
+},{}]},{},[26]);
