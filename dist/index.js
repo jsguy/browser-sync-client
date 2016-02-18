@@ -280,15 +280,22 @@ utils.getElementByXpath = function(xpath){
  * @param elem
  * @returns {{tagName: (elem.tagName|*), index: *}}
  */
-utils.getElementData = function (elem) {
+utils.getElementData = function (elem, event) {
     var tagName = elem.tagName;
     var index = utils.getElementIndex(tagName, elem);
     var xpath = utils.getXpath(elem);
-    return {
-        tagName:    tagName,
-        index:      index,
-        xpath:      xpath 
+    var result = {
+        tagName: tagName,
+        index: index,
+        xpath: xpath 
     };
+
+    //  Optionally add additional event data
+    if(event){
+        result.event = event;
+    }
+
+    return result;
 };
 
 /**
@@ -2277,6 +2284,40 @@ exports.getScrollTopPercentage = function (pos) {
 var EVENT_NAME  = "touchend";
 var OPT_PATH    = "ghostMode.touchend";
 exports.canEmitEvents = true;
+var createTouchList = function(elem, args){
+    var result = {},
+        doc = document;
+    for(var i in args) {if(args.hasOwnProperty(i)){
+        if(i == "touches" || i == "changedTouches" || i == "targetTouches") {
+            var touchy = doc.createTouch(
+                window,
+                elem,
+                parseInt(Math.random() * (new Date()).getTime(), 10),
+                args[i].pageX,
+                args[i].pageY
+            );
+            result[i] = doc.createTouchList([touchy]);
+        }
+    }}
+
+    return result;
+};
+
+var getTouchData = function(event) {
+    var result = {},
+        props = ["touches", "changedTouches", "targetTouches"];
+
+    for(var i = 0; i < props.length; i += 1) {
+        if(event[props[i]] && event[props[i]][0]) {
+            result[props[i]] = {
+                pageX: event[props[i]][0].pageX,
+                pageY: event[props[i]][0].pageY
+            };
+        }
+    }
+
+    return result;
+};
 
 /**
  * @param {BrowserSync} bs
@@ -2296,7 +2337,7 @@ exports.browserEvent = function (bs) {
     return function (event) {
         if (exports.canEmitEvents) {
             var elem = event.target || event.srcElement;
-            bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem));
+            bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem, getTouchData(event)));
         } else {
             exports.canEmitEvents = true;
         }
@@ -2318,7 +2359,7 @@ exports.socketEvent = function (bs, eventManager) {
 
         if (elem) {
             exports.canEmitEvents = false;
-            eventManager.triggerEvent(elem, EVENT_NAME);
+            eventManager.triggerEvent(elem, EVENT_NAME, null, createTouchList(elem, data.event));
         }
     };
 };
@@ -2332,6 +2373,40 @@ exports.socketEvent = function (bs, eventManager) {
 var EVENT_NAME  = "touchmove";
 var OPT_PATH    = "ghostMode.touchmove";
 exports.canEmitEvents = true;
+var createTouchList = function(elem, args){
+    var result = {},
+        doc = document;
+    for(var i in args) {if(args.hasOwnProperty(i)){
+        if(i == "touches" || i == "changedTouches" || i == "targetTouches") {
+            var touchy = doc.createTouch(
+                window,
+                elem,
+                parseInt(Math.random() * (new Date()).getTime(), 10),
+                args[i].pageX,
+                args[i].pageY
+            );
+            result[i] = doc.createTouchList([touchy]);
+        }
+    }}
+
+    return result;
+};
+
+var getTouchData = function(event) {
+    var result = {},
+        props = ["touches", "changedTouches", "targetTouches"];
+
+    for(var i = 0; i < props.length; i += 1) {
+        if(event[props[i]] && event[props[i]][0]) {
+            result[props[i]] = {
+                pageX: event[props[i]][0].pageX,
+                pageY: event[props[i]][0].pageY
+            };
+        }
+    }
+
+    return result;
+};
 
 /**
  * @param {BrowserSync} bs
@@ -2351,7 +2426,7 @@ exports.browserEvent = function (bs) {
     return function (event) {
         if (exports.canEmitEvents) {
             var elem = event.target || event.srcElement;
-            bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem));
+            bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem, getTouchData(event)));
         } else {
             exports.canEmitEvents = true;
         }
@@ -2373,7 +2448,7 @@ exports.socketEvent = function (bs, eventManager) {
 
         if (elem) {
             exports.canEmitEvents = false;
-            eventManager.triggerEvent(elem, EVENT_NAME);
+            eventManager.triggerEvent(elem, EVENT_NAME, null, createTouchList(elem, data.event));
         }
     };
 };
@@ -2387,6 +2462,98 @@ exports.socketEvent = function (bs, eventManager) {
 var EVENT_NAME  = "touchstart";
 var OPT_PATH    = "ghostMode.touchstart";
 exports.canEmitEvents = true;
+var createTouchList = function(elem, args){
+    var result = {},
+        doc = document;
+
+    //  Add polyfills - these are also used in
+    //  touchmove and touchend 
+    if(!doc.createTouch) {
+        doc.createTouch = function(view, target, identifier, pageX, pageY, screenX, screenY, clientX, clientY) {
+            // auto set
+            if(clientX == undefined || clientY == undefined) {
+                clientX = pageX - window.pageXOffset;
+                clientY = pageY - window.pageYOffset;
+            }
+
+            if(screenX == undefined || screenY == undefined) {
+                screenX = 0;
+                screenY = 0;
+            }
+
+            return new Touch({
+                target: target,
+                identifier: identifier, 
+                pageX: pageX,
+                pageY: pageY,
+                screenX: screenX,
+                screenY: screenY,
+                clientX: clientX,
+                clientY: clientY
+            });
+        };
+    }
+
+    if(!doc.createTouchList) {
+        doc.createTouchList = function(touchPoints) {
+            var touches = [],
+                touchList = [],
+                i,
+                self = this;
+
+            for(i = 0; i < touchPoints.length; i += 1) {
+                var point = touchPoints[i];
+                touchList.push({
+                    target: self.target,
+                    identifier: point.identifier,
+                    clientX: point.clientX,
+                    clientY: point.clientY,
+                    pageX: point.pageX,
+                    pageY: point.pageY,
+                    screenX: point.screenX,
+                    screenY: point.screenY
+                });
+            }
+
+            touchList.item = function(i) {
+                return touchList[i];
+            };
+
+            return touchList;
+        };
+    }
+
+    for(var i in args) {if(args.hasOwnProperty(i)){
+        if(i == "touches" || i == "changedTouches" || i == "targetTouches") {
+            var touchy = doc.createTouch(
+                window,
+                elem,
+                parseInt(Math.random() * (new Date()).getTime(), 10),
+                args[i].pageX,
+                args[i].pageY
+            );
+            result[i] = doc.createTouchList([touchy]);
+        }
+    }}
+
+    return result;
+};
+
+var getTouchData = function(event) {
+    var result = {},
+        props = ["touches", "changedTouches", "targetTouches"];
+
+    for(var i = 0; i < props.length; i += 1) {
+        if(event[props[i]] && event[props[i]][0]) {
+            result[props[i]] = {
+                pageX: event[props[i]][0].pageX,
+                pageY: event[props[i]][0].pageY
+            };
+        }
+    }
+
+    return result;
+};
 
 /**
  * @param {BrowserSync} bs
@@ -2406,7 +2573,7 @@ exports.browserEvent = function (bs) {
     return function (event) {
         if (exports.canEmitEvents) {
             var elem = event.target || event.srcElement;
-            bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem));
+            bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem, getTouchData(event)));
         } else {
             exports.canEmitEvents = true;
         }
@@ -2428,7 +2595,7 @@ exports.socketEvent = function (bs, eventManager) {
 
         if (elem) {
             exports.canEmitEvents = false;
-            eventManager.triggerEvent(elem, EVENT_NAME);
+            eventManager.triggerEvent(elem, EVENT_NAME, null, createTouchList(elem, data.event));
         }
     };
 };
