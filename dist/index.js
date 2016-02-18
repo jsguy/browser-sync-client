@@ -321,10 +321,10 @@ utils.initHoverStyles = function(){
     var doc = utils.getDocument(),
         hoverClass = "browser-sync-hover",
         appendStyle = function(css){
-            var head = document.head || document.getElementsByTagName('head')[0],
-                style = document.createElement('style');
+            var head = document.head || document.getElementsByTagName("head")[0],
+                style = document.createElement("style");
 
-            style.type = 'text/css';
+            style.type = "text/css";
             if (style.styleSheet){
                 style.styleSheet.cssText = css;
             } else {
@@ -1737,17 +1737,19 @@ exports.socketEvent = function (bs, eventManager) {
             //  Timeout to allow click events to work first
             setTimeout(function(){
                 if (data.type === "radio") {
-                    if (data.checked != elem.checked) {
+                    data.checked = (!!data.checked);
+                    if (data.checked !== elem.checked) {
                         eventManager.triggerEvent(elem, "click");
                     }
                 }
                 if (data.type === "checkbox") {
-                    if (data.checked != elem.checked) {
+                    data.checked = (!!data.checked);
+                    if (data.checked !== elem.checked) {
                         eventManager.triggerEvent(elem, "click");
                     }
                 }
                 if (data.tagName === "SELECT") {
-                    if (data.value != elem.value) {
+                    if (data.value !== elem.value) {
                         elem.value = data.value;
                         eventManager.triggerEvent(elem, "click");
                     }
@@ -2300,7 +2302,7 @@ var createTouchList = function(elem, args){
     var result = {},
         doc = document;
     for(var i in args) {if(args.hasOwnProperty(i)){
-        if(i == "touches" || i == "changedTouches" || i == "targetTouches") {
+        if(i === "touches" || i === "changedTouches" || i === "targetTouches") {
             var touchy = doc.createTouch(
                 window,
                 elem,
@@ -2389,7 +2391,7 @@ var createTouchList = function(elem, args){
     var result = {},
         doc = document;
     for(var i in args) {if(args.hasOwnProperty(i)){
-        if(i == "touches" || i == "changedTouches" || i == "targetTouches") {
+        if(i === "touches" || i === "changedTouches" || i === "targetTouches") {
             var touchy = doc.createTouch(
                 window,
                 elem,
@@ -2483,17 +2485,17 @@ var createTouchList = function(elem, args){
     if(!doc.createTouch) {
         doc.createTouch = function(view, target, identifier, pageX, pageY, screenX, screenY, clientX, clientY) {
             // auto set
-            if(clientX == undefined || clientY == undefined) {
+            if(typeof clientX === "undefined" || typeof clientY === "undefined") {
                 clientX = pageX - window.pageXOffset;
                 clientY = pageY - window.pageYOffset;
             }
 
-            if(screenX == undefined || screenY == undefined) {
+            if(typeof screenX === "undefined" || typeof screenY === "undefined") {
                 screenX = 0;
                 screenY = 0;
             }
 
-            return new Touch({
+            return new doc.window.Touch({
                 target: target,
                 identifier: identifier, 
                 pageX: pageX,
@@ -2536,7 +2538,7 @@ var createTouchList = function(elem, args){
     }
 
     for(var i in args) {if(args.hasOwnProperty(i)){
-        if(i == "touches" || i == "changedTouches" || i == "targetTouches") {
+        if(i === "touches" || i === "changedTouches" || i === "targetTouches") {
             var touchy = doc.createTouch(
                 window,
                 elem,
