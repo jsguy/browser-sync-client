@@ -1405,11 +1405,11 @@ exports.socketEvent = function (bs, eventManager) {
 exports.plugins = {
     "inputs":           require("./ghostmode.forms.input"),
     "change":           require("./ghostmode.forms.change"),
-    "toggles":          require("./ghostmode.forms.toggles"),
     "submit":           require("./ghostmode.forms.submit"),
     "keydown":          require("./ghostmode.forms.keydown.js"),
     "keypress":         require("./ghostmode.forms.keypress.js"),
-    "contenteditable":  require("./ghostmode.forms.contenteditable.js")
+    "contenteditable":  require("./ghostmode.forms.contenteditable.js"),
+    "toggles":          require("./ghostmode.forms.toggles")
 };
 
 /**
@@ -1700,9 +1700,7 @@ exports.addEvents = function (eventManager, event) {
  * @returns {Function}
  */
 exports.browserEvent = function (bs) {
-
     return function (event) {
-
         if (exports.canEmitEvents) {
             var elem = event.target || event.srcElement;
             var data;
@@ -1716,7 +1714,6 @@ exports.browserEvent = function (bs) {
         } else {
             exports.canEmitEvents = true;
         }
-
     };
 };
 
@@ -1724,7 +1721,7 @@ exports.browserEvent = function (bs) {
  * @param {BrowserSync} bs
  * @returns {Function}
  */
-exports.socketEvent = function (bs) {
+exports.socketEvent = function (bs, eventManager) {
 
     return function (data) {
 
@@ -1737,15 +1734,26 @@ exports.socketEvent = function (bs) {
         var elem = bs.utils.getElementByXpath(data.xpath);
 
         if (elem) {
-            if (data.type === "radio") {
-                elem.checked = true;
-            }
-            if (data.type === "checkbox") {
-                elem.checked = data.checked;
-            }
-            if (data.tagName === "SELECT") {
-                elem.value = data.value;
-            }
+            //  Timeout to allow click events to work first
+            setTimeout(function(){
+                if (data.type === "radio") {
+                    if (data.checked != elem.checked) {
+                        eventManager.triggerEvent(elem, "click");
+                    }
+                }
+                if (data.type === "checkbox") {
+                    if (data.checked != elem.checked) {
+                        eventManager.triggerEvent(elem, "click");
+                    }
+                }
+                if (data.tagName === "SELECT") {
+                    if (data.value != elem.value) {
+                        elem.value = data.value;
+                        eventManager.triggerEvent(elem, "click");
+                    }
+                }
+            }, 0);
+
             return elem;
         }
         return false;
@@ -1997,9 +2005,13 @@ exports.browserEvent = function (bs) {
 
             bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem));
 
-            //  Mouseover parent as well
+            //  Mouseover parents as well - for 
+            //  some reason mousover doesn't like to bubble
             if(typeof elem2 !== "undefined") {
-                bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem2));
+                while(elem2 && elem2 !== document.body) {
+                    bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem2));
+                    elem2 = elem2.parentNode;
+                }
             }
         } else {
             exports.canEmitEvents = true;
