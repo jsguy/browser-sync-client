@@ -2495,7 +2495,7 @@ var createTouchList = function(elem, args){
                 screenY = 0;
             }
 
-            return new doc.window.Touch({
+            return new window.Touch({
                 target: target,
                 identifier: identifier, 
                 pageX: pageX,
