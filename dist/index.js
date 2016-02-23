@@ -1033,6 +1033,7 @@ exports._EventManager = function (cache) {
 //  "UIEvents", "MouseEvents", "HTMLEvents";
 exports.triggerEvent = function(elem, type, name, args){
     var evObj,
+        lType = typeof type !=="undefined"? type.toLowerCase(): undefined,
         addArgs = function(e, args) {
             var i;
             args = args || {};
@@ -1041,7 +1042,7 @@ exports.triggerEvent = function(elem, type, name, args){
             }}
         };
 
-    name = name || typeof type !=="undefined" && type.toLowerCase() === "click"? 
+    name = name || typeof type !=="undefined" && lType === "click"? 
         "MouseEvents": 
         "HTMLEvents";
 
@@ -1751,7 +1752,9 @@ exports.socketEvent = function (bs, eventManager) {
                 if (data.tagName === "SELECT") {
                     if (data.value !== elem.value) {
                         elem.value = data.value;
-                        eventManager.triggerEvent(elem, "click");
+                        eventManager.triggerEvent(elem, "focus");
+                        eventManager.triggerEvent(elem, "change");
+                        eventManager.triggerEvent(elem, "blur");
                     }
                 }
             }, 0);
@@ -1933,19 +1936,8 @@ exports.init = function (bs, eventManager) {
 exports.browserEvent = function (bs) {
     return function (event) {
         if (exports.canEmitEvents) {
-            var elem = event.target || event.srcElement,
-                elem2 = elem.parentNode;
-
+            var elem = event.target || event.srcElement;
             bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem));
-
-            //  Mouseout parents as well - for 
-            //  some reason mouseout doesn't like to bubble
-            if(typeof elem2 !== "undefined") {
-                while(elem2 && elem2 !== document.body) {
-                    bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem2));
-                    elem2 = elem2.parentNode;
-                }
-            }
         } else {
             exports.canEmitEvents = true;
         }
@@ -1966,15 +1958,22 @@ exports.socketEvent = function (bs, eventManager) {
         //  Apply CSS hover ability (you can safely call this as many times as you like)
         bs.utils.initHoverStyles();
 
-        var elem = bs.utils.getElementByXpath(data.xpath);
-
-        //  Apply classname to element
-        bs.utils.removeClass(elem, "browser-sync-hover");
+        var elem = bs.utils.getElementByXpath(data.xpath),
+            elem2;
 
         if (elem) {
             exports.canEmitEvents = false;
-            //  We want to apply 
+            bs.utils.removeClass(elem, "browser-sync-hover");
             eventManager.triggerEvent(elem, EVENT_NAME, "MouseEvents");
+
+            elem2 = elem.parentNode;
+
+            //  parents as well
+            while(elem2 && elem2 !== document.body) {
+                bs.utils.removeClass(elem2, "browser-sync-hover");
+                eventManager.triggerEvent(elem2, EVENT_NAME, "MouseEvents");
+                elem2 = elem2.parentNode;
+            }
         }
     };
 };
@@ -2006,19 +2005,8 @@ exports.init = function (bs, eventManager) {
 exports.browserEvent = function (bs) {
     return function (event) {
         if (exports.canEmitEvents) {
-            var elem = event.target || event.srcElement,
-                elem2 = elem.parentNode;
-
+            var elem = event.target || event.srcElement;
             bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem));
-
-            //  Mouseover parents as well - for 
-            //  some reason mousover doesn't like to bubble
-            if(typeof elem2 !== "undefined") {
-                while(elem2 && elem2 !== document.body) {
-                    bs.socket.emit(EVENT_NAME, bs.utils.getElementData(elem2));
-                    elem2 = elem2.parentNode;
-                }
-            }
         } else {
             exports.canEmitEvents = true;
         }
@@ -2039,15 +2027,22 @@ exports.socketEvent = function (bs, eventManager) {
         //  Apply CSS hover ability (you can safely call this as many times as you like)
         bs.utils.initHoverStyles();
 
-        var elem = bs.utils.getElementByXpath(data.xpath);
-
-        //  Apply classname to element
-        bs.utils.addClass(elem, "browser-sync-hover");
+        var elem = bs.utils.getElementByXpath(data.xpath),
+            elem2;
 
         if (elem) {
             exports.canEmitEvents = false;
-            //  We want to apply 
+            bs.utils.addClass(elem, "browser-sync-hover");
             eventManager.triggerEvent(elem, EVENT_NAME, "MouseEvents");
+
+            elem2 = elem.parentNode;
+
+            //  parents as well
+            while(elem2 && elem2 !== document.body) {
+                bs.utils.addClass(elem2, "browser-sync-hover");
+                eventManager.triggerEvent(elem2, EVENT_NAME, "MouseEvents");
+                elem2 = elem2.parentNode;
+            }
         }
     };
 };
