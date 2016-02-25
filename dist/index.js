@@ -307,6 +307,24 @@ utils.getSingleElement = function (tagName, index) {
     return elems[index];
 };
 
+
+
+/**
+ * Get an element - try xpath first, then index - typically the xpath will work, unless the element has an ID that is different
+ * @param {object} data
+ */
+utils.getElement = function(data) {
+    var elem = utils.getElementByXpath(data.xpath);
+
+    if(!elem) {
+        elem = utils.getSingleElement(data.tagName, data.index);
+    }
+
+    return elem;
+};
+
+
+
 /**
  * Get the body element
  */
@@ -321,14 +339,14 @@ utils.initHoverStyles = function(){
     var doc = utils.getDocument(),
         hoverClass = "browser-sync-hover",
         appendStyle = function(css){
-            var head = document.head || document.getElementsByTagName("head")[0],
-                style = document.createElement("style");
+            var head = doc.head || doc.getElementsByTagName("head")[0],
+                style = doc.createElement("style");
 
             style.type = "text/css";
             if (style.styleSheet){
                 style.styleSheet.cssText = css;
             } else {
-                style.appendChild(document.createTextNode(css));
+                style.appendChild(doc.createTextNode(css));
             }
 
             head.appendChild(style);
@@ -1178,7 +1196,7 @@ exports.socketEvent = function (bs, eventManager) {
             return false;
         }
 
-        var elem = bs.utils.getElementByXpath(data.xpath);
+        var elem = bs.utils.getElement(data);
 
         if (elem) {
             exports.canEmitEvents = false;
@@ -1245,7 +1263,7 @@ exports.socketEvent = function (bs, eventManager) {
             return false;
         }
 
-        var elem = bs.utils.getElementByXpath(data.xpath);
+        var elem = bs.utils.getElement(data);
 
         if (elem && elem.tagName === "SELECT") {
             elem.value = data.value;
@@ -1315,7 +1333,7 @@ exports.socketEvent = function (bs) {
             return false;
         }
 
-        var elem = bs.utils.getElementByXpath(data.xpath);
+        var elem = bs.utils.getElement(data);
 
         if (elem && elem.contentEditable === "true") {
             elem.innerHTML = data.innerHTML;
@@ -1385,7 +1403,7 @@ exports.socketEvent = function (bs, eventManager) {
             return false;
         }
 
-        var elem = bs.utils.getElementByXpath(data.xpath),
+        var elem = bs.utils.getElement(data),
             eventType;
 
         if (elem) {
@@ -1501,7 +1519,7 @@ exports.socketEvent = function (bs) {
             return false;
         }
 
-        var elem = bs.utils.getElementByXpath(data.xpath);
+        var elem = bs.utils.getElement(data);
 
         if (elem) {
             var evt = document.createEvent("Events");
@@ -1576,7 +1594,7 @@ exports.socketEvent = function (bs) {
             return false;
         }
 
-        var elem = bs.utils.getElementByXpath(data.xpath);
+        var elem = bs.utils.getElement(data);
 
         if (elem) {
             var evt = document.createEvent("Events");
@@ -1642,7 +1660,7 @@ exports.socketEvent = function (bs) {
             return false;
         }
 
-        var elem = bs.utils.getElementByXpath(data.xpath);
+        var elem = bs.utils.getElement(data);
 
         exports.canEmitEvents = false;
 
@@ -1725,14 +1743,13 @@ exports.browserEvent = function (bs) {
 exports.socketEvent = function (bs, eventManager) {
 
     return function (data) {
-
         if (!bs.canSync(data, OPT_PATH)) {
             return false;
         }
 
         exports.canEmitEvents = false;
 
-        var elem = bs.utils.getElementByXpath(data.xpath);
+        var elem = bs.utils.getElement(data);
 
         if (elem) {
             //  Timeout to allow click events to work first
@@ -1900,7 +1917,7 @@ exports.socketEvent = function (bs, eventManager) {
             return false;
         }
 
-        var elem = bs.utils.getElementByXpath(data.xpath);
+        var elem = bs.utils.getElement(data);
 
         if (elem) {
             exports.canEmitEvents = false;
@@ -1958,7 +1975,7 @@ exports.socketEvent = function (bs, eventManager) {
         //  Apply CSS hover ability (you can safely call this as many times as you like)
         bs.utils.initHoverStyles();
 
-        var elem = bs.utils.getElementByXpath(data.xpath),
+        var elem = bs.utils.getElement(data),
             elem2;
 
         if (elem) {
@@ -2027,7 +2044,7 @@ exports.socketEvent = function (bs, eventManager) {
         //  Apply CSS hover ability (you can safely call this as many times as you like)
         bs.utils.initHoverStyles();
 
-        var elem = bs.utils.getElementByXpath(data.xpath),
+        var elem = bs.utils.getElement(data),
             elem2;
 
         if (elem) {
@@ -2105,7 +2122,7 @@ exports.socketEvent = function (bs, eventManager) {
             return false;
         }
 
-        var elem = bs.utils.getElementByXpath(data.xpath);
+        var elem = bs.utils.getElement(data);
 
         if (elem) {
             exports.canEmitEvents = false;
@@ -2301,7 +2318,7 @@ var createTouchList = function(elem, args){
     var result = {},
         doc = document;
     for(var i in args) {if(args.hasOwnProperty(i)){
-        if(i === "touches" || i === "changedTouches" || i === "targetTouches") {
+        if(doc && doc.createTouch && (i === "touches" || i === "changedTouches" || i === "targetTouches")) {
             var touchy = doc.createTouch(
                 window,
                 elem,
@@ -2368,7 +2385,7 @@ exports.socketEvent = function (bs, eventManager) {
             return false;
         }
 
-        var elem = bs.utils.getElementByXpath(data.xpath);
+        var elem = bs.utils.getElement(data);
 
         if (elem) {
             exports.canEmitEvents = false;
@@ -2390,7 +2407,7 @@ var createTouchList = function(elem, args){
     var result = {},
         doc = document;
     for(var i in args) {if(args.hasOwnProperty(i)){
-        if(i === "touches" || i === "changedTouches" || i === "targetTouches") {
+        if(doc && doc.createTouch && (i === "touches" || i === "changedTouches" || i === "targetTouches")) {
             var touchy = doc.createTouch(
                 window,
                 elem,
@@ -2457,7 +2474,7 @@ exports.socketEvent = function (bs, eventManager) {
             return false;
         }
 
-        var elem = bs.utils.getElementByXpath(data.xpath);
+        var elem = bs.utils.getElement(data);
 
         if (elem) {
             exports.canEmitEvents = false;
@@ -2537,7 +2554,7 @@ var createTouchList = function(elem, args){
     }
 
     for(var i in args) {if(args.hasOwnProperty(i)){
-        if(i === "touches" || i === "changedTouches" || i === "targetTouches") {
+        if(doc && doc.createTouch && (i === "touches" || i === "changedTouches" || i === "targetTouches")) {
             var touchy = doc.createTouch(
                 window,
                 elem,
@@ -2604,7 +2621,7 @@ exports.socketEvent = function (bs, eventManager) {
             return false;
         }
 
-        var elem = bs.utils.getElementByXpath(data.xpath);
+        var elem = bs.utils.getElement(data);
 
         if (elem) {
             exports.canEmitEvents = false;
